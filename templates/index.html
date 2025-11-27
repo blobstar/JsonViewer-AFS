@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSON Browser</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(100, 116, 139, 0.5) transparent;
+        }
+        *::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        *::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        *::-webkit-scrollbar-thumb {
+            background-color: rgba(100, 116, 139, 0.5);
+            border-radius: 4px;
+        }
+        *::-webkit-scrollbar-thumb:hover {
+            background-color: rgba(100, 116, 139, 0.8);
+        }
+        .file-item {
+            transition: all 0.2s ease;
+            border-left: 3px solid transparent;
+        }
+        .file-item:hover {
+            border-left-color: #3b82f6;
+            background-color: rgba(59, 130, 246, 0.1);
+        }
+        .file-item.active {
+            border-left-color: #3b82f6;
+            background-color: rgba(59, 130, 246, 0.2);
+        }
+        .json-field {
+            animation: slideIn 0.3s ease;
+        }
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .code-block {
+            background-color: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(100, 116, 139, 0.2);
+        }
+    </style>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const fileList = document.getElementById('file-list');
+            const searchInput = document.getElementById('search');
+            const fileContent = document.getElementById('file-content');
+            const fileTitle = document.getElementById('file-title');
+            let files = [];
+            let currentFile = null;
+
+            function renderFiles(filter = '') {
+                fileList.innerHTML = '';
+                files.filter(f => f.toLowerCase().includes(filter.toLowerCase())).forEach(file => {
+                    const li = document.createElement('li');
+                    li.className = 'file-item px-4 py-3 cursor-pointer rounded-lg text-sm text-gray-300' + (file === currentFile ? ' active' : '');
+                    li.innerHTML = `<div class="truncate">${file}</div>`;
+                    li.onclick = () => loadFile(file);
+                    fileList.appendChild(li);
+                });
+            }
+
+            function loadFile(filename) {
+                currentFile = filename;
+                fetch(`/api/file/${encodeURIComponent(filename)}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        fileContent.innerHTML = '';
+                        fileTitle.textContent = filename;
+                        if (Array.isArray(data) && data.length > 0) {
+                            data.forEach((item, idx) => {
+                                const section = document.createElement('div');
+                                section.className = 'json-field mb-6 p-6 bg-gradient-to-br from-slate-800 to-slate-900 rounded-lg border border-slate-700 hover:border-slate-600 transition-colors';
+                                const companyName = item.company_name || 'Unknown Company';
+                                const headerHtml = `<div class="flex items-center gap-2 mb-4 pb-4 border-b border-slate-700">
+                                    <h3 class="text-lg font-semibold text-blue-300">${companyName}</h3>
+                                </div>`;
+                                
+                                // Display field definitions in a table format
+                                const fields = item.fields || {};
+                                let fieldsHtml = '<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="border-b border-slate-600"><th class="text-left px-3 py-2 text-blue-300">Field Name</th><th class="text-left px-3 py-2 text-blue-300">Type</th><th class="text-left px-3 py-2 text-blue-300">Value</th></tr></thead><tbody>';
+                                
+                                Object.entries(fields).forEach(([key, value]) => {
+                                    const type = value.type || 'unknown';
+                                    let valueContent = '';
+                                    
+                                    // Handle Significant_Judgements_Or_Estimates specially
+                                    if (key === 'Significant_Judgements_Or_Estimates' && value.valueArray) {
+                                        valueContent = `<div class="max-h-60 overflow-y-auto bg-slate-800 rounded p-2">
+                                            ${value.valueArray.map((item, i) => `
+                                                <div class="mb-3 pb-3 border-b border-slate-700 last:border-b-0">
+                                                    <div class="text-xs text-slate-400 mb-1">Item ${i + 1} (confidence: ${item.confidence})</div>
+                                                    <div class="text-xs text-slate-200 leading-relaxed">${item.valueString || 'N/A'}</div>
+                                                </div>
+                                            `).join('')}
+                                        </div>`;
+                                    } else if (value.valueString) {
+                                        // Handle regular valueString
+                                        valueContent = `<div class="text-xs text-slate-200 truncate max-w-xs" title="${value.valueString}">${value.valueString}</div>`;
+                                    } else if (value.valueArray) {
+                                        valueContent = `<span class="text-xs text-slate-400">[${value.valueArray.length} items]</span>`;
+                                    } else {
+                                        valueContent = '<span class="text-xs text-slate-500">-</span>';
+                                    }
+                                    
+                                    fieldsHtml += `<tr class="border-b border-slate-700 hover:bg-slate-700 hover:bg-opacity-50">
+                                        <td class="px-3 py-2 text-cyan-300 font-mono text-xs align-top">${key}</td>
+                                        <td class="px-3 py-2 text-slate-300 align-top"><span class="px-2 py-1 bg-slate-700 rounded text-xs">${type}</span></td>
+                                        <td class="px-3 py-2 text-slate-300 align-top">${valueContent}</td>
+                                    </tr>`;
+                                });
+                                
+                                fieldsHtml += '</tbody></table></div>';
+                                
+                                const preHtml = `<div class="mt-4 pt-4 border-t border-slate-700"><h4 class="text-slate-300 text-sm font-semibold mb-3">Raw JSON:</h4><pre class="code-block text-gray-300 whitespace-pre-wrap break-words text-xs leading-relaxed p-4 rounded overflow-x-auto font-mono">${JSON.stringify(item.fields, null, 2)}</pre></div>`;
+                                section.innerHTML = headerHtml + fieldsHtml + preHtml;
+                                fileContent.appendChild(section);
+                            });
+                        } else {
+                            fileContent.innerHTML = '<div class="text-center py-12"><div class="text-slate-400 text-lg">No fields found in this file</div></div>';
+                        }
+                        renderFiles(searchInput.value);
+                    })
+                    .catch(err => {
+                        fileContent.innerHTML = `<div class="text-red-400 bg-red-900 bg-opacity-20 p-4 rounded">Error loading file: ${err.message}</div>`;
+                    });
+            }
+
+            fetch('/api/files')
+                .then(res => res.json())
+                .then(data => {
+                    files = data.sort();
+                    renderFiles();
+                });
+
+            searchInput.addEventListener('input', e => {
+                renderFiles(e.target.value);
+            });
+        });
+    </script>
+</head>
+<body class="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-gray-100 min-h-screen" style="background: linear-gradient(to bottom right, rgb(2, 6, 23), rgb(15, 23, 42), rgb(2, 6, 23));">
+    <div class="flex h-screen">
+        <!-- Left Sidebar -->
+        <aside class="w-80 bg-gradient-to-b from-slate-900 to-slate-800 border-r border-slate-700 flex flex-col shadow-lg">
+            <!-- Header -->
+            <div class="p-6 border-b border-slate-700">
+                <h2 class="text-xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">Files</h2>
+                <p class="text-xs text-slate-500 mt-1">Navigate your JSON files</p>
+            </div>
+            
+            <!-- Search -->
+            <div class="p-4 border-b border-slate-700">
+                <div class="relative">
+                    <svg class="absolute left-3 top-3 w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                    <input 
+                        id="search" 
+                        type="text" 
+                        placeholder="Search files..." 
+                        class="w-full pl-10 pr-4 py-2 rounded-lg bg-slate-800 text-gray-200 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-slate-500 transition-all"
+                    />
+                </div>
+            </div>
+            
+            <!-- File List -->
+            <ul id="file-list" class="flex-1 overflow-y-auto p-4 space-y-2"></ul>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 flex flex-col bg-gradient-to-br from-slate-950 to-slate-900 overflow-hidden">
+            <!-- Header -->
+            <div class="border-b border-slate-700 p-6 shadow-sm">
+                <h1 class="text-3xl font-bold text-white truncate" id="file-title">Select a file to view</h1>
+                <p class="text-sm text-slate-400 mt-2">JSON Fields Viewer</p>
+            </div>
+            
+            <!-- Content Area -->
+            <div id="file-content" class="flex-1 overflow-y-auto p-8"></div>
+        </main>
+    </div>
+</body>
+</html>
