@@ -92,25 +92,58 @@
                                 
                                 // Display field definitions in a table format
                                 const fields = item.fields || {};
-                                let fieldsHtml = '<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="border-b border-slate-600"><th class="text-left px-3 py-2 text-blue-300">Field Name</th><th class="text-left px-3 py-2 text-blue-300">Type</th><th class="text-left px-3 py-2 text-blue-300">Value</th></tr></thead><tbody>';
+                                let fieldsHtml = '<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="border-b border-slate-600"><th class="text-left px-3 py-2 text-blue-300">Field Name</th><th class="text-left px-3 py-2 text-blue-300">Confidence</th><th class="text-left px-3 py-2 text-blue-300">Value</th></tr></thead><tbody>';
+                                
+                                // Helper function to get confidence badge HTML
+                                function getConfidenceBadge(confidence) {
+                                    const confValue = parseFloat(confidence);
+                                    if (confValue < 0.30) {
+                                        return `<span class="bg-red-950 text-red-200 text-xs font-medium px-1.5 py-0.5 rounded inline-block">${(confValue * 100).toFixed(1)}%</span>`;
+                                    } else if (confValue < 0.60) {
+                                        return `<span class="bg-yellow-950 text-yellow-200 text-xs font-medium px-1.5 py-0.5 rounded inline-block">${(confValue * 100).toFixed(1)}%</span>`;
+                                    } else if (confValue < 1.00) {
+                                        return `<span class="bg-green-950 text-green-200 text-xs font-medium px-1.5 py-0.5 rounded inline-block">${(confValue * 100).toFixed(1)}%</span>`;
+                                    } else {
+                                        return `<span class="bg-green-950 text-green-200 text-xs font-medium px-1.5 py-0.5 rounded inline-block">100%</span>`;
+                                    }
+                                }
                                 
                                 Object.entries(fields).forEach(([key, value]) => {
-                                    const type = value.type || 'unknown';
+                                    const confidence = value.confidence !== undefined ? value.confidence : 'N/A';
+                                    let confidenceBadge = '';
+                                    
+                                    if (confidence !== 'N/A') {
+                                        confidenceBadge = getConfidenceBadge(confidence);
+                                    } else {
+                                        confidenceBadge = '<span class="text-xs text-slate-500">-</span>';
+                                    }
+                                    
                                     let valueContent = '';
                                     
                                     // Handle Significant_Judgements_Or_Estimates specially
                                     if (key === 'Significant_Judgements_Or_Estimates' && value.valueArray) {
                                         valueContent = `<div class="max-h-60 overflow-y-auto bg-slate-800 rounded p-2">
-                                            ${value.valueArray.map((item, i) => `
+                                            ${value.valueArray.map((item, i) => {
+                                                const itemConfidence = item.confidence !== undefined ? item.confidence : 'N/A';
+                                                let itemBadge = '';
+                                                if (itemConfidence !== 'N/A') {
+                                                    itemBadge = getConfidenceBadge(itemConfidence);
+                                                } else {
+                                                    itemBadge = '<span class="text-xs text-slate-500">-</span>';
+                                                }
+                                                return `
                                                 <div class="mb-3 pb-3 border-b border-slate-700 last:border-b-0">
-                                                    <div class="text-xs text-slate-400 mb-1">Item ${i + 1} (confidence: ${item.confidence})</div>
+                                                    <div class="text-xs text-slate-400 mb-1 flex items-center gap-2">
+                                                        <span>Item ${i + 1}</span>
+                                                        ${itemBadge}
+                                                    </div>
                                                     <div class="text-xs text-slate-200 leading-relaxed">${item.valueString || 'N/A'}</div>
                                                 </div>
-                                            `).join('')}
+                                            `}).join('')}
                                         </div>`;
                                     } else if (value.valueString) {
                                         // Handle regular valueString
-                                        valueContent = `<div class="text-xs text-slate-200 truncate max-w-xs" title="${value.valueString}">${value.valueString}</div>`;
+                                        valueContent = `<div class="text-xs text-slate-200 break-words max-w-md leading-relaxed">${value.valueString}</div>`;
                                     } else if (value.valueArray) {
                                         valueContent = `<span class="text-xs text-slate-400">[${value.valueArray.length} items]</span>`;
                                     } else {
@@ -119,7 +152,7 @@
                                     
                                     fieldsHtml += `<tr class="border-b border-slate-700 hover:bg-slate-700 hover:bg-opacity-50">
                                         <td class="px-3 py-2 text-cyan-300 font-mono text-xs align-top">${key}</td>
-                                        <td class="px-3 py-2 text-slate-300 align-top"><span class="px-2 py-1 bg-slate-700 rounded text-xs">${type}</span></td>
+                                        <td class="px-3 py-2 text-slate-300 align-top">${confidenceBadge}</td>
                                         <td class="px-3 py-2 text-slate-300 align-top">${valueContent}</td>
                                     </tr>`;
                                 });
