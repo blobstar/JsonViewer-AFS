@@ -130,10 +130,10 @@
                                 
                                 // Display field definitions in a table format
                                 const fields = item.fields || {};
-                                let fieldsHtml = '<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="border-b border-slate-600"><th class="text-left px-3 py-2 text-blue-300">Field Name</th><th class="text-left px-3 py-2 text-blue-300">Type</th><th class="text-left px-3 py-2 text-blue-300">Value</th></tr></thead><tbody>';
+                                let fieldsHtml = '<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="border-b border-slate-600"><th class="text-left px-3 py-2 text-blue-300">Field Name</th><th class="text-left px-3 py-2 text-blue-300">Confidence</th><th class="text-left px-3 py-2 text-blue-300">Value</th></tr></thead><tbody>';
                                 
                                 Object.entries(fields).forEach(([key, value]) => {
-                                    const type = value.type || 'unknown';
+                                    const rawConfidence = (value.confidence !== undefined) ? value.confidence : ((value.confidenceScore !== undefined) ? value.confidenceScore : null);
                                     let valueContent = '';
                                     
                                     // Handle Significant_Judgements_Or_Estimates specially
@@ -155,9 +155,32 @@
                                         valueContent = '<span class="text-xs text-slate-500">-</span>';
                                     }
                                     
+                                    // Format confidence and choose badge color
+                                    let confidenceDisplay = '-';
+                                    let confidenceClass = 'bg-slate-700 text-slate-200';
+                                    if (rawConfidence !== null) {
+                                        if (typeof rawConfidence === 'number') {
+                                            let pct = rawConfidence;
+                                            if (pct <= 1) pct = pct * 100;
+                                            pct = Number(pct);
+                                            confidenceDisplay = pct.toFixed(1) + '%';
+                                            if (pct >= 75) {
+                                                confidenceClass = 'bg-green-600 text-white';
+                                            } else if (pct >= 50) {
+                                                confidenceClass = 'bg-amber-500 text-white';
+                                            } else if (pct >= 25) {
+                                                confidenceClass = 'bg-orange-500 text-white';
+                                            } else {
+                                                confidenceClass = 'bg-red-600 text-white';
+                                            }
+                                        } else {
+                                            confidenceDisplay = String(rawConfidence);
+                                        }
+                                    }
+
                                     fieldsHtml += `<tr class="border-b border-slate-700 hover:bg-slate-700 hover:bg-opacity-50">
                                         <td class="px-3 py-2 text-cyan-300 font-mono text-xs align-top">${key}</td>
-                                        <td class="px-3 py-2 text-slate-300 align-top"><span class="px-2 py-1 bg-slate-700 rounded text-xs">${type}</span></td>
+                                        <td class="px-3 py-2 text-slate-300 align-top"><span class="px-2 py-1 ${confidenceClass} rounded text-xs">${confidenceDisplay}</span></td>
                                         <td class="px-3 py-2 text-slate-300 align-top">${valueContent}</td>
                                     </tr>`;
                                 });
