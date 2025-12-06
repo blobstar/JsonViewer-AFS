@@ -56,6 +56,30 @@
     </style>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // Sidebar collapse state (persist in localStorage)
+            const container = document.querySelector('.flex.h-screen');
+            const asideElem = document.querySelector('aside');
+            const mainElem = document.querySelector('main');
+            const sidebarToggleBtns = [];
+            function setCollapsed(collapsed) {
+                if (collapsed) {
+                    asideElem.classList.remove('w-80');
+                    asideElem.classList.add('w-16');
+                    // hide elements with data-hide-when-collapsed
+                    document.querySelectorAll('[data-hide-when-collapsed]').forEach(el => el.classList.add('hidden'));
+                    document.querySelectorAll('.file-label').forEach(el => el.classList.add('hidden'));
+                } else {
+                    asideElem.classList.remove('w-16');
+                    asideElem.classList.add('w-80');
+                    document.querySelectorAll('[data-hide-when-collapsed]').forEach(el => el.classList.remove('hidden'));
+                    document.querySelectorAll('.file-label').forEach(el => el.classList.remove('hidden'));
+                }
+                localStorage.setItem('sidebarCollapsed', collapsed ? '1' : '0');
+            }
+            // initialize from storage
+            const saved = localStorage.getItem('sidebarCollapsed');
+            if (saved === '1') setCollapsed(true);
+
             const fileList = document.getElementById('file-list');
             const searchInput = document.getElementById('search');
             const fileContent = document.getElementById('file-content');
@@ -65,10 +89,24 @@
 
             function renderFiles(filter = '') {
                 fileList.innerHTML = '';
-                files.filter(f => f.toLowerCase().includes(filter.toLowerCase())).forEach(file => {
+                const filtered = files.filter(f => f.toLowerCase().includes(filter.toLowerCase()));
+                // update file count badge
+                const fileCountElem = document.getElementById('file-count');
+                if (fileCountElem) fileCountElem.textContent = filtered.length;
+
+                filtered.forEach(file => {
                     const li = document.createElement('li');
-                    li.className = 'file-item px-4 py-3 cursor-pointer rounded-lg text-sm text-gray-300' + (file === currentFile ? ' active' : '');
-                    li.innerHTML = `<div class="truncate">${file}</div>`;
+                    li.className = 'file-item flex items-center gap-3 px-3 py-2 cursor-pointer rounded-lg text-sm text-gray-300' + (file === currentFile ? ' active' : '');
+                    const icon = document.createElement('div');
+                    icon.className = 'w-8 h-8 flex items-center justify-center bg-slate-800 rounded text-xs text-slate-300 font-semibold';
+                    icon.textContent = file.charAt(0).toUpperCase();
+
+                    const label = document.createElement('div');
+                    label.className = 'truncate file-label';
+                    label.textContent = file;
+
+                    li.appendChild(icon);
+                    li.appendChild(label);
                     li.onclick = () => loadFile(file);
                     fileList.appendChild(li);
                 });
@@ -92,58 +130,25 @@
                                 
                                 // Display field definitions in a table format
                                 const fields = item.fields || {};
-                                let fieldsHtml = '<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="border-b border-slate-600"><th class="text-left px-3 py-2 text-blue-300">Field Name</th><th class="text-left px-3 py-2 text-blue-300">Confidence</th><th class="text-left px-3 py-2 text-blue-300">Value</th></tr></thead><tbody>';
-                                
-                                // Helper function to get confidence badge HTML
-                                function getConfidenceBadge(confidence) {
-                                    const confValue = parseFloat(confidence);
-                                    if (confValue < 0.30) {
-                                        return `<span class="bg-red-950 text-red-200 text-xs font-medium px-1.5 py-0.5 rounded inline-block">${(confValue * 100).toFixed(1)}%</span>`;
-                                    } else if (confValue < 0.60) {
-                                        return `<span class="bg-yellow-950 text-yellow-200 text-xs font-medium px-1.5 py-0.5 rounded inline-block">${(confValue * 100).toFixed(1)}%</span>`;
-                                    } else if (confValue < 1.00) {
-                                        return `<span class="bg-green-950 text-green-200 text-xs font-medium px-1.5 py-0.5 rounded inline-block">${(confValue * 100).toFixed(1)}%</span>`;
-                                    } else {
-                                        return `<span class="bg-green-950 text-green-200 text-xs font-medium px-1.5 py-0.5 rounded inline-block">100%</span>`;
-                                    }
-                                }
+                                let fieldsHtml = '<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="border-b border-slate-600"><th class="text-left px-3 py-2 text-blue-300">Field Name</th><th class="text-left px-3 py-2 text-blue-300">Type</th><th class="text-left px-3 py-2 text-blue-300">Value</th></tr></thead><tbody>';
                                 
                                 Object.entries(fields).forEach(([key, value]) => {
-                                    const confidence = value.confidence !== undefined ? value.confidence : 'N/A';
-                                    let confidenceBadge = '';
-                                    
-                                    if (confidence !== 'N/A') {
-                                        confidenceBadge = getConfidenceBadge(confidence);
-                                    } else {
-                                        confidenceBadge = '<span class="text-xs text-slate-500">-</span>';
-                                    }
-                                    
+                                    const type = value.type || 'unknown';
                                     let valueContent = '';
                                     
                                     // Handle Significant_Judgements_Or_Estimates specially
                                     if (key === 'Significant_Judgements_Or_Estimates' && value.valueArray) {
                                         valueContent = `<div class="max-h-60 overflow-y-auto bg-slate-800 rounded p-2">
-                                            ${value.valueArray.map((item, i) => {
-                                                const itemConfidence = item.confidence !== undefined ? item.confidence : 'N/A';
-                                                let itemBadge = '';
-                                                if (itemConfidence !== 'N/A') {
-                                                    itemBadge = getConfidenceBadge(itemConfidence);
-                                                } else {
-                                                    itemBadge = '<span class="text-xs text-slate-500">-</span>';
-                                                }
-                                                return `
+                                            ${value.valueArray.map((item, i) => `
                                                 <div class="mb-3 pb-3 border-b border-slate-700 last:border-b-0">
-                                                    <div class="text-xs text-slate-400 mb-1 flex items-center gap-2">
-                                                        <span>Item ${i + 1}</span>
-                                                        ${itemBadge}
-                                                    </div>
+                                                    <div class="text-xs text-slate-400 mb-1">Item ${i + 1} (confidence: ${item.confidence})</div>
                                                     <div class="text-xs text-slate-200 leading-relaxed">${item.valueString || 'N/A'}</div>
                                                 </div>
-                                            `}).join('')}
+                                            `).join('')}
                                         </div>`;
                                     } else if (value.valueString) {
                                         // Handle regular valueString
-                                        valueContent = `<div class="text-xs text-slate-200 break-words max-w-md leading-relaxed">${value.valueString}</div>`;
+                                        valueContent = `<div class="text-xs text-slate-200 truncate max-w-xs" title="${value.valueString}">${value.valueString}</div>`;
                                     } else if (value.valueArray) {
                                         valueContent = `<span class="text-xs text-slate-400">[${value.valueArray.length} items]</span>`;
                                     } else {
@@ -152,7 +157,7 @@
                                     
                                     fieldsHtml += `<tr class="border-b border-slate-700 hover:bg-slate-700 hover:bg-opacity-50">
                                         <td class="px-3 py-2 text-cyan-300 font-mono text-xs align-top">${key}</td>
-                                        <td class="px-3 py-2 text-slate-300 align-top">${confidenceBadge}</td>
+                                        <td class="px-3 py-2 text-slate-300 align-top"><span class="px-2 py-1 bg-slate-700 rounded text-xs">${type}</span></td>
                                         <td class="px-3 py-2 text-slate-300 align-top">${valueContent}</td>
                                     </tr>`;
                                 });
@@ -183,26 +188,40 @@
             searchInput.addEventListener('input', e => {
                 renderFiles(e.target.value);
             });
+
+            // Add toggle buttons behavior
+            const mobileToggle = document.getElementById('sidebar-toggle-mobile');
+            const desktopToggle = document.getElementById('sidebar-toggle-desktop');
+            if (mobileToggle) mobileToggle.addEventListener('click', () => setCollapsed(localStorage.getItem('sidebarCollapsed') === '1' ? false : true));
+            if (desktopToggle) desktopToggle.addEventListener('click', () => setCollapsed(localStorage.getItem('sidebarCollapsed') === '1' ? false : true));
         });
     </script>
 </head>
 <body class="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-gray-100 min-h-screen" style="background: linear-gradient(to bottom right, rgb(2, 6, 23), rgb(15, 23, 42), rgb(2, 6, 23));">
     <div class="flex h-screen">
         <!-- Left Sidebar -->
-        <aside class="w-80 bg-gradient-to-b from-slate-900 to-slate-800 border-r border-slate-700 flex flex-col shadow-lg">
+        <aside class="w-80 bg-gradient-to-b from-slate-900 to-slate-800 border-r border-slate-700 flex flex-col shadow-lg transition-all duration-200">
             <!-- Header -->
             <div class="p-6 border-b border-slate-700">
                 <div class="flex items-center justify-between">
                     <div>
-                        <h2 class="text-xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">Files</h2>
-                        <p class="text-xs text-slate-500 mt-1">Navigate your JSON files</p>
+                        <div class="flex items-center gap-2">
+                            <h2 class="text-xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent" data-hide-when-collapsed>Files</h2>
+                            <span id="file-count" data-hide-when-collapsed class="inline-block ml-1 bg-slate-700 text-xs text-slate-200 px-2 py-0.5 rounded">0</span>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-1" data-hide-when-collapsed>Navigate your JSON files</p>
                     </div>
-                    <img src="/static/forvis-mazars-logo-02.png" alt="Logo" class="h-12 w-auto">
+                    <div class="flex items-center gap-2">
+                        <!-- collapse button for desktop -->
+                        <button id="sidebar-toggle-desktop" class="hidden md:inline-flex items-center justify-center w-8 h-8 rounded bg-slate-800 text-slate-300 hover:bg-slate-700" title="Toggle sidebar">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"/></svg>
+                        </button>
+                    </div>
                 </div>
             </div>
             
             <!-- Search -->
-            <div class="p-4 border-b border-slate-700">
+            <div class="p-4 border-b border-slate-700" data-hide-when-collapsed>
                 <div class="relative">
                     <svg class="absolute left-3 top-3 w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
@@ -223,9 +242,20 @@
         <!-- Main Content -->
         <main class="flex-1 flex flex-col bg-gradient-to-br from-slate-950 to-slate-900 overflow-hidden">
             <!-- Header -->
-            <div class="border-b border-slate-700 p-6 shadow-sm">
-                <h1 class="text-3xl font-bold text-white truncate" id="file-title">Select a file to view</h1>
-                <p class="text-sm text-slate-400 mt-2">JSON Fields Viewer</p>
+            <div class="border-b border-slate-700 p-6 shadow-sm flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <!-- mobile toggle button -->
+                    <button id="sidebar-toggle-mobile" class="md:hidden inline-flex items-center justify-center w-10 h-10 rounded bg-slate-800 text-slate-300 hover:bg-slate-700" title="Open sidebar">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+                    </button>
+                    <div>
+                        <h1 class="text-3xl font-bold text-white truncate" id="file-title">Select a file to view</h1>
+                        <p class="text-sm text-slate-400 mt-2">JSON Fields Viewer</p>
+                    </div>
+                </div>
+                <div class="hidden sm:flex items-center" data-hide-when-collapsed>
+                    <!-- reserved for future actions -->
+                </div>
             </div>
             
             <!-- Content Area -->
